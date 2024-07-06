@@ -1,5 +1,3 @@
-# evaluator.py
-
 from docx import Document as DocxDocument
 import spacy
 from transformers import pipeline
@@ -60,8 +58,11 @@ def calculate_hallucination_score(generated_text, reference_text):
     ref_entities = extract_entities(reference_text)
     
     # Calculate entity overlap score
-    common_entities = set(gen_entities) & set(ref_entities)
-    entity_score = 1 - (len(common_entities) / len(set(gen_entities)))
+    if gen_entities:
+        common_entities = set(gen_entities) & set(ref_entities)
+        entity_score = 1 - (len(common_entities) / len(set(gen_entities)))
+    else:
+        entity_score = 1  # Maximum hallucination if no entities are found in the generated text
     
     # Calculate NLI entailment score
     nli_result = nli_model(f"premise: {reference_text} hypothesis: {generated_text}")
