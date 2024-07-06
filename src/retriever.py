@@ -1,7 +1,5 @@
 import os
 from docx import Document as DocxDocument
-from langchain.text_splitter import RecursiveCharacterTextSplitter
-from langchain_core.documents import Document
 
 CONTRACTS_DIR = "../data/contracts"
 
@@ -16,8 +14,3 @@ def load_contracts():
             file_path = os.path.join(CONTRACTS_DIR, filename)
             contracts.append(read_docx(file_path))
     return contracts
-
-def chunk_contracts(contracts):
-    splitter = RecursiveCharacterTextSplitter(chunk_size=500, chunk_overlap=20)
-    documents = [Document(page_content=chunk) for contract in contracts for chunk in splitter.split_text(contract)]
-    return documents
