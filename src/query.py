@@ -1,44 +1,67 @@
-from retriever import load_contracts, chunk_contracts
-from generator import create_embeddings, initialize_chroma_index
-from evaluator import calculate_hallucination_score, calculate_additional_metrics, load_evaluation_data
+from retriever import load_contracts
+from generator import chunk_contracts, create_docstore
+from evaluator import load_evaluation_data, bleu, calculate_hallucination_score, calculate_additional_metrics
+import os
+from dotenv import load_dotenv
 
-# Paths to data directories and files
-CONTRACTS_DIR = "../data/contracts"
-EVAL_FILE = "../data/qna/Robinson Q&A.docx"
+# Load environment variables from .env file
+load_dotenv()
+openai_api_key = os.getenv("OPENAI_API_KEY")
 
-# Load contract data
+# Load and chunk contracts
 contracts = load_contracts()
-
-# Chunk contracts
 documents = chunk_contracts(contracts)
 
-# Create embeddings
-embeddings = create_embeddings()
+# Create docstore
+docstore = create_docstore(documents, openai_api_key)
 
-# Initialize Chroma index
-docstore = initialize_chroma_index(documents, embeddings)
+# Load evaluation data
+EVAL_FILE = "../data/qna/Robinson Q&A.docx"
+evaluation_data = load_evaluation_data(EVAL_FILE)
 
-# Main function to run the query and calculate scores
-def run_query(query, evaluation_data):
+# Function to perform similarity search
+def query_function(query):
     results = docstore.similarity_search(query, k=5)
+    return results[0].page_content if results else ""
 
-    for i, result in enumerate(results):
-        generated_text = result.page_content
-        reference_text = ""
-        for qa_pair in evaluation_data:
-            if query in qa_pair["question"]:
-                reference_text = qa_pair["answer"]
-                break
-        
-        hallucination_score = calculate_hallucination_score(generated_text, reference_text)
-        
-        print(f"Result {i + 1}:\n{generated_text[:500]}\n")
-        print(f"Hallucination Score: {hallucination_score}\n")
+# Prepare queries and references from evaluation data
+queries = [qa['question'] for qa in evaluation_data]
+references = [qa['answer'] for qa in evaluation_data]
 
-if __name__ == "__main__":
-    # Load evaluation data
-    evaluation_data = load_evaluation_data(EVAL_FILE)
+# Print individual results and metrics
+total_bleu_score = 0
+total_hallucination_score = 0
+num_samples = len(queries)
+
+print("Evaluation Results:")
+print("="*50)
+
+for query, reference in zip(queries, references):
+    generated_answer = query_function(query)
+    bleu_score_value = bleu(generated_answer, reference)
+    hallucination_score_value = calculate_hallucination_score(generated_answer, reference)
+    additional_metrics = calculate_additional_metrics(generated_answer, reference)
     
-    # Example query
-    query = "Who owns the IP?"
-    run_query(query, evaluation_data)
+    total_bleu_score += bleu_score_value
+    total_hallucination_score += hallucination_score_value
+    
+    print(f"Query: {query}")
+    print(f"Generated Answer: {generated_answer}")
+    print(f"Reference Answer: {reference}")
+    print(f"BLEU Score: {bleu_score_value:.2f}")
+    print(f"Hallucination Score: {hallucination_score_value:.2f}")
+    print("-"*50)
+
+avg_bleu_score = total_bleu_score / num_samples
+avg_hallucination_score = total_hallucination_score / num_samples
+
+avg_metrics = {
+    "average_bleu_score": avg_bleu_score,
+    "average_hallucination_score": avg_hallucination_score
+}
+
+print("Average Metrics:")
+print("="*50)
+for metric, value in avg_metrics.items():
+    print(f"{metric.replace('_', ' ').capitalize()}: {value:.2f}")
+
